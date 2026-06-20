@@ -64,7 +64,6 @@
     justify-content: center;
   }
 
-  /* Glowing border ring */
   .frame-wrap::before {
     content: '';
     position: absolute;
@@ -129,34 +128,6 @@
     100% { background-position: -200% 0; }
   }
 
-  /* ── Corner badge: image counter ── */
-  #counter {
-    position: fixed;
-    bottom: 28px;
-    right: 28px;
-    z-index: 10;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .dot-track {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-  .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: background 0.3s, transform 0.3s;
-  }
-  .dot.active {
-    background: var(--accent2);
-    transform: scale(1.5);
-    box-shadow: 0 0 6px var(--accent2);
-  }
-
   /* ── Refresh hint ── */
   #hint {
     position: fixed;
@@ -200,80 +171,41 @@
     transition: opacity 0.35s ease;
   }
   #veil.active { opacity: 1; }
-
-  /* ── Error state ── */
-  #error-box {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    gap: 14px;
-    color: var(--text);
-    text-align: center;
-    padding: 24px;
-  }
-  #error-box.show { display: flex; }
-  #error-box h2 { font-size: 1.1rem; font-weight: 600; opacity: 0.9; }
-  #error-box p  { font-size: 0.82rem; color: var(--muted); max-width: 320px; line-height: 1.6; }
-  #error-box code {
-    font-size: 0.75rem;
-    background: rgba(255,255,255,0.07);
-    padding: 8px 14px;
-    border-radius: 8px;
-    word-break: break-all;
-    max-width: 340px;
-    display: block;
-    color: var(--accent2);
-  }
-
 </style>
 </head>
 <body>
 
-<!-- Ambient orbs -->
 <div class="bg-orb bg-orb-1"></div>
 <div class="bg-orb bg-orb-2"></div>
-
-<!-- Veil for page transitions -->
 <div id="veil"></div>
 
-<!-- Invisible click-anywhere button -->
 <button id="next-btn" onclick="nextImage()" aria-label="Next image"></button>
 
-<!-- Main stage -->
 <div id="stage">
   <div class="frame-wrap" id="frame-wrap">
     <div class="frame-inner" id="frame-inner">
       <div class="shimmer" id="shimmer"></div>
-      <img id="main-img" alt="Random image" />
+      <img id="main-img" alt="Viewer Content" />
     </div>
-    <div id="error-box"></div>
   </div>
 </div>
 
-<!-- Hint -->
 <div id="hint">
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
     <path d="M1 4v6h6M23 20v-6h-6"/>
     <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
   </svg>
-  Click anywhere for next
+ 
 </div>
 
-<!-- Dot counter -->
-<div id="counter"><div class="dot-track" id="dot-track"></div></div>
-
 <script>
-// ── Config ── Paste your Google Sheet CSV URL here ──────
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR2B5d8TyLesE24ZVNHLal3CoI0o9WQglZYPNWAQwdYL05q0qDc-fChNFFCWe4ng2vfuXmGiT-TcNtX/pub?gid=0&single=true&output=csv';
 
-// ── State ────────────────────────────────────────────────
 let images = [];
 let currentIndex = -1;
 let isTransitioning = false;
 
-// ── Helpers ──────────────────────────────────────────────
 function driveDirectURL(url) {
-  // Convert various Google Drive share URLs to direct image URLs
   const patterns = [
     /drive\.google\.com\/file\/d\/([^\/\?]+)/,
     /drive\.google\.com\/open\?id=([^&]+)/,
@@ -281,9 +213,8 @@ function driveDirectURL(url) {
   ];
   for (const p of patterns) {
     const m = url.match(p);
-    if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+    if (m) return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1200`;
   }
-  // Already a direct URL or unknown format – return as-is
   return url;
 }
 
@@ -296,40 +227,21 @@ function shuffle(arr) {
   return a;
 }
 
-// ── CSV fetch & parse ─────────────────────────────────────
 async function loadSheet() {
   const res = await fetch(SHEET_CSV_URL);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) return [];
   const text = await res.text();
   const rows = text.trim().split('\n').map(r => r.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
-  // Detect header
+  
   const start = rows[0][0].toLowerCase() === 'order' ? 1 : 0;
   const parsed = rows.slice(start)
     .filter(r => r.length >= 2 && r[1])
     .map(r => ({ order: parseInt(r[0]) || 0, link: driveDirectURL(r[1]) }));
-  if (!parsed.length) throw new Error('No valid rows found');
   return shuffle(parsed);
 }
 
-// ── Dot indicators ───────────────────────────────────────
-function buildDots(total) {
-  const track = document.getElementById('dot-track');
-  track.innerHTML = '';
-  const show = Math.min(total, 8);
-  for (let i = 0; i < show; i++) {
-    const d = document.createElement('div');
-    d.className = 'dot';
-    track.appendChild(d);
-  }
-}
-function setActiveDot(idx) {
-  document.querySelectorAll('.dot').forEach((d, i) => {
-    d.classList.toggle('active', i === idx % Math.min(images.length, 8));
-  });
-}
-
-// ── Show image ───────────────────────────────────────────
 function showImage(idx) {
+  if (!images[idx]) return;
   const { link } = images[idx];
   const img = document.getElementById('main-img');
   const shimmer = document.getElementById('shimmer');
@@ -344,22 +256,14 @@ function showImage(idx) {
     frame.classList.add('loaded');
     img.classList.add('visible');
   };
+  
   img.onerror = () => {
     shimmer.classList.add('hidden');
-    showError(`Could not load image.<br><small>${link}</small>`);
   };
+  
   img.src = link;
-
-  setActiveDot(idx);
 }
 
-function showError(msg) {
-  const box = document.getElementById('error-box');
-  box.innerHTML = `<h2>Couldn't load image</h2><p>${msg}</p>`;
-  box.classList.add('show');
-}
-
-// ── Navigation ───────────────────────────────────────────
 function nextImage() {
   if (isTransitioning || images.length === 0) return;
   isTransitioning = true;
@@ -375,21 +279,19 @@ function nextImage() {
   }, 340);
 }
 
-// ── Init ─────────────────────────────────────────────────
 async function init() {
   if (!SHEET_CSV_URL || SHEET_CSV_URL === 'YOUR_GOOGLE_SHEET_CSV_URL_HERE') return;
-
   try {
     images = await loadSheet();
-    buildDots(images.length);
-    currentIndex = 0;
-    showImage(currentIndex);
+    if (images.length > 0) {
+      currentIndex = Math.floor(Math.random() * images.length);
+      showImage(currentIndex);
+    }
   } catch (e) {
-    showError(`Could not load sheet: ${e.message}<br><small>Make sure the sheet is published as CSV.</small>`);
+    // Silently fails
   }
 }
 
-// Keyboard: space / arrow / enter = next image
 document.addEventListener('keydown', e => {
   if (['Space','ArrowRight','ArrowDown','Enter'].includes(e.code)) {
     e.preventDefault();
